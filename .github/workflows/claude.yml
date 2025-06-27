@@ -30,14 +30,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      # - name: Run Claude Code
-      #   id: claude
-      #   uses: anthropics/claude-code-action@beta
-      #   with:
-      #     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           
           # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
-          # model: "claude-opus-4-20250514"
+          model: "claude-3-5-haiku-latest"
           
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
