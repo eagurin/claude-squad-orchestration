@@ -35,7 +35,7 @@ jobs:
         uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: "claude-3-5-haiku-latest"
+          # model: "claude-3-5-haiku-latest"
           
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
