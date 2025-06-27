@@ -23,14 +23,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@controllers/*": ["src/controllers/*"],
-      "@models/*": ["src/models/*"],
-      "@routes/*": ["src/routes/*"],
-      "@middleware/*": ["src/middleware/*"],
-      "@services/*": ["src/services/*"],
+      "@entities/*": ["src/entities/*"],
+      "@config/*": ["src/config/*"],
       "@types/*": ["src/types/*"],
-      "@utils/*": ["src/utils/*"],
-      "@config/*": ["src/config/*"]
+      "@utils/*": ["src/utils/*"]
     }
   },
   "include": [
