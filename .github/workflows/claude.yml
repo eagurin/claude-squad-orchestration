@@ -21,8 +21,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write
+      issues: write
       id-token: write
     steps:
       - name: Checkout repository
@@ -36,19 +36,27 @@ jobs:
         continue-on-error: true
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
+          # model: "claude-3-5-haiku-latest"
+          
+          # Optional: Customize the trigger phrase (default: @claude)
+          # trigger_phrase: "/claude"
+          
+          # Optional: Trigger when specific user is assigned to an issue
+          # assignee_trigger: "claude-bot"
+          
+          # Allow Claude to run common development commands
+          allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
+          
+          # Custom instructions for the project
           custom_instructions: |
-            Follow our coding standards
-            Ensure all new code has tests
-            Use TypeScript for new files
-      
-      - name: Handle Claude Failure
-        if: steps.claude.outcome == 'failure'
-        run: |
-          echo "⚠️ Claude Code execution failed. This may be due to:"
-          echo "- API rate limits"
-          echo "- Network issues"
-          echo "- Invalid configuration"
-          echo "Please check the logs above for more details."
-          exit 0
-
+            This is a Claude Squad Orchestration project with TypeScript/Node.js backend.
+            Follow these guidelines:
+            - Follow existing code style and patterns
+            - Ensure all new code has proper TypeScript types
+            - Run tests and linting before suggesting changes
+            - Focus on the orchestration system and GitHub Actions workflows
+            - Maintain compatibility with existing entities and database schema
+          
+          # Optional: Custom environment variables for Claude
+          # claude_env: |
+          #   NODE_ENV: test

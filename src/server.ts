@@ -4,7 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-import mongoose from 'mongoose';
+import { initializeDatabase } from './config/database';
 import rateLimit from 'express-rate-limit';
 
 // Load environment variables
@@ -16,16 +16,7 @@ const app: Application = express();
 // Port configuration
 const PORT = process.env.PORT || 3000;
 
-// Database connection
-const connectDB = async (): Promise<void> => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ecommerce_db');
-    console.log('MongoDB connected successfully');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
-  }
-};
+// Database connection is now handled by initializeDatabase from config/database.ts
 
 // Rate limiting configuration
 const limiter = rateLimit({
@@ -107,7 +98,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
-    await connectDB();
+    await initializeDatabase();
     
     // Start listening
     app.listen(PORT, () => {

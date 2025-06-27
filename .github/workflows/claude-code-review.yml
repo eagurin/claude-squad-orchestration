@@ -16,8 +16,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write
+      issues: write
       id-token: write
     
     steps:
@@ -32,6 +32,10 @@ jobs:
         continue-on-error: true
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          
+          # Use Claude 3.5 Haiku Latest for faster code reviews
+          model: "claude-3-5-haiku-latest"
+          
           direct_prompt: |
             Please review this pull request and provide feedback on:
             - Code quality and best practices

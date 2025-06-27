@@ -1,0 +1,10 @@
+{
+  "name": "test-project",
+  "version": "1.0.0",
+  "description": "Тестовый конфигурационный файл",
+  "settings": {
+    "debug": true,
+    "timeout": 5000,
+    "retries": 3
+  }
+}
