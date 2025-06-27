@@ -1,0 +1,93 @@
+{
+  "name": "React + Node.js",
+  "id": "react-node",
+  "description": "Modern web application with React frontend and Node.js backend",
+  "technologies": {
+    "frontend": {
+      "framework": "React",
+      "language": "TypeScript",
+      "styling": "Tailwind CSS",
+      "bundler": "Vite",
+      "testing": "Jest + React Testing Library"
+    },
+    "backend": {
+      "runtime": "Node.js",
+      "framework": "Express",
+      "language": "TypeScript",
+      "database": "PostgreSQL",
+      "orm": "Prisma",
+      "testing": "Jest + Supertest"
+    },
+    "devops": {
+      "containerization": "Docker",
+      "orchestration": "Kubernetes",
+      "ci_cd": "GitHub Actions",
+      "monitoring": "Prometheus + Grafana"
+    }
+  },
+  "agents": {
+    "frontend": {
+      "role": "Frontend Developer",
+      "expertise": ["React", "TypeScript", "Tailwind CSS", "Vite", "Jest"],
+      "responsibilities": [
+        "Create React components with TypeScript",
+        "Implement responsive design with Tailwind CSS",
+        "Set up Vite build configuration",
+        "Write unit tests with Jest and RTL",
+        "Optimize bundle size and performance"
+      ]
+    },
+    "backend": {
+      "role": "Backend Developer", 
+      "expertise": ["Node.js", "Express", "PostgreSQL", "Prisma", "TypeScript"],
+      "responsibilities": [
+        "Design and implement REST APIs",
+        "Set up database schema with Prisma",
+        "Implement authentication and authorization",
+        "Write API tests with Jest and Supertest",
+        "Optimize database queries and performance"
+      ]
+    },
+    "testing": {
+      "role": "QA Engineer",
+      "expertise": ["Jest", "Cypress", "React Testing Library", "API Testing"],
+      "responsibilities": [
+        "Write comprehensive unit tests",
+        "Create integration tests for API endpoints",
+        "Implement E2E tests with Cypress",
+        "Set up test coverage reporting",
+        "Ensure quality gates and CI integration"
+      ]
+    },
+    "devops": {
+      "role": "DevOps Engineer",
+      "expertise": ["Docker", "Kubernetes", "GitHub Actions", "AWS/GCP"],
+      "responsibilities": [
+        "Create Docker containers for services",
+        "Set up Kubernetes manifests",
+        "Design CI/CD pipelines",
+        "Configure monitoring and logging",
+        "Implement security best practices"
+      ]
+    }
+  },
+  "project_structure": {
+    "frontend": "frontend/",
+    "backend": "backend/", 
+    "shared": "shared/",
+    "docs": "docs/",
+    "infrastructure": "infrastructure/"
+  },
+  "dependencies": {
+    "frontend": {
+      "runtime": ["react", "react-dom", "@types/react"],
+      "dev": ["vite", "@vitejs/plugin-react", "tailwindcss"],
+      "testing": ["jest", "@testing-library/react", "@testing-library/jest-dom"]
+    },
+    "backend": {
+      "runtime": ["express", "prisma", "@types/express"],
+      "dev": ["nodemon", "ts-node", "@types/node"],
+      "testing": ["jest", "supertest", "@types/supertest"]
+    }
+  }
+}

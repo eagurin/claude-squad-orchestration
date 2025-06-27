@@ -27,14 +27,14 @@
 
 **Claude Squad Orchestration** — это революционная система, которая превращает разработку программного обеспечения в автоматизированный процесс. Система координирует работу **4 специализированных AI-агентов**, каждый из которых выполняет свою роль в команде разработки:
 
-### 🎯 Наша команда AI-агентов
+### 🎯 Мультистековая команда AI-агентов
 
-| Агент | Роль | Специализация |
-|-------|------|---------------|
-| 🎨 **Frontend** | UI/UX Developer | React, TypeScript, Tailwind CSS |
-| ⚙️ **Backend** | API Developer | Node.js, Express, PostgreSQL |
-| 🧪 **Testing** | QA Engineer | Jest, Cypress, E2E тестирование |
-| 🚀 **DevOps** | Infrastructure | Docker, Kubernetes, CI/CD |
+| Агент | Роль | React+Node | Vue+Python | Flutter+Go |
+|-------|------|------------|------------|------------|
+| 🎨 **Frontend** | UI/UX Developer | React+TS+Tailwind | Vue.js 3+TS+Tailwind | Flutter+Dart+Bloc |
+| ⚙️ **Backend** | API Developer | Node.js+Express+Prisma | Python+FastAPI+SQLAlchemy | Go+Gin+GORM |
+| 🧪 **Testing** | QA Engineer | Jest+RTL+Cypress | Vitest+Vue Test Utils+Playwright | flutter_test+Go testing |
+| 🚀 **DevOps** | Infrastructure | Docker+K8s+GitHub Actions | Docker+K8s+GitHub Actions | Docker+Mobile CI/CD |
 
 ### 🏆 Почему выбирают нас?
 
@@ -71,15 +71,17 @@ watch 'tmux ls | grep cs-'
 ### Создание production-ready приложения
 
 ```bash
-# Создание полноценной e-commerce платформы
-./scripts/core/cs-claude-orchestrator.sh my-shop ~/projects/my-shop
+# React + Node.js стек
+./scripts/automation/multi-stack-orchestrator.sh my-shop react-node ~/projects/my-shop
 
-# Результат: Полноценное приложение с:
-# ✅ React frontend с TypeScript
-# ✅ Node.js backend с Express
-# ✅ Полное покрытие тестами
-# ✅ Docker & Kubernetes конфигурация
-# ✅ CI/CD pipeline
+# Vue.js + Python стек  
+./scripts/automation/multi-stack-orchestrator.sh my-api vue-python ~/projects/my-api
+
+# Flutter + Go стек
+./scripts/automation/multi-stack-orchestrator.sh my-mobile flutter-go ~/projects/my-mobile
+
+# С GitHub интеграцией и автопланированием
+./scripts/automation/multi-stack-orchestrator.sh my-project react-node ~/projects eagurin/my-repo
 ```
 
 ## 🎯 Примеры проектов
@@ -88,7 +90,7 @@ watch 'tmux ls | grep cs-'
 <summary>🛒 <strong>E-commerce платформа</strong> (расширить)</summary>
 
 ```bash
-./scripts/core/cs-claude-orchestrator.sh ecommerce-pro ~/projects/ecommerce
+./scripts/automation/multi-stack-orchestrator.sh ecommerce-pro react-node ~/projects/ecommerce
 ```
 
 **Что получите:**
@@ -124,7 +126,7 @@ watch 'tmux ls | grep cs-'
 <summary>🤖 <strong>AI Chat Bot</strong> (расширить)</summary>
 
 ```bash
-./scripts/core/cs-claude-orchestrator.sh ai-chatbot ~/projects/chatbot
+./scripts/automation/multi-stack-orchestrator.sh ai-chatbot vue-python ~/projects/chatbot
 ```
 
 **Включает:**
@@ -194,11 +196,20 @@ export DEPLOYMENT_TARGET="aws"
 ./scripts/utils/monitoring-dashboard.sh
 ```
 
-### 🔗 GitHub интеграция
+### 🔗 GitHub автоматизация
 
 ```bash
-# Автоматический CI/CD с GitHub Actions
-./scripts/github/auto-create-github-app.sh
+# Автоматическое планирование проекта
+./scripts/planning/auto-roadmap.sh my-project react-node eagurin/my-repo
+
+# Умный code review для PR
+./scripts/review/smart-review.sh 123 vue-python thorough  
+
+# Управление проектом
+./scripts/management/project-manager.sh status my-project eagurin/my-repo
+
+# Анализ производительности проекта
+./scripts/management/project-manager.sh analyze eagurin/my-repo
 ```
 
 ## 📖 Документация

@@ -1,0 +1,141 @@
+name: Smart Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+jobs:
+  detect-stack:
+    runs-on: ubuntu-latest
+    outputs:
+      stack: ${{ steps.detection.outputs.stack }}
+      should_review: ${{ steps.detection.outputs.should_review }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Detect project stack
+        id: detection
+        run: |
+          # Detect stack based on files in repository
+          if [ -f "package.json" ] && [ -f "src/App.tsx" ]; then
+            echo "stack=react-node" >> $GITHUB_OUTPUT
+          elif [ -f "requirements.txt" ] && [ -f "main.py" ]; then
+            echo "stack=vue-python" >> $GITHUB_OUTPUT
+          elif [ -f "pubspec.yaml" ] && [ -f "go.mod" ]; then
+            echo "stack=flutter-go" >> $GITHUB_OUTPUT
+          else
+            echo "stack=react-node" >> $GITHUB_OUTPUT  # default
+          fi
+          
+          # Check if we should run review
+          if [[ "${{ github.event_name }}" == "pull_request" ]] || 
+             [[ "${{ github.event.comment.body }}" == *"@claude review"* ]]; then
+            echo "should_review=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_review=false" >> $GITHUB_OUTPUT
+          fi
+
+  smart-review:
+    needs: detect-stack
+    if: needs.detect-stack.outputs.should_review == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+      - name: Setup dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq tmux
+          
+      - name: Run Smart Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Get PR number from event
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            PR_NUMBER="${{ github.event.number }}"
+          else
+            PR_NUMBER=$(echo "${{ github.event.issue.html_url }}" | grep -o '[0-9]*$')
+          fi
+          
+          # Determine review depth from comment or default
+          REVIEW_DEPTH="standard"
+          if [[ "${{ github.event.comment.body }}" == *"@claude review thorough"* ]]; then
+            REVIEW_DEPTH="thorough"
+          elif [[ "${{ github.event.comment.body }}" == *"@claude review security"* ]]; then
+            REVIEW_DEPTH="security"
+          elif [[ "${{ github.event.comment.body }}" == *"@claude review quick"* ]]; then
+            REVIEW_DEPTH="quick"
+          fi
+          
+          # Run smart review
+          ./scripts/review/smart-review.sh "$PR_NUMBER" "${{ needs.detect-stack.outputs.stack }}" "$REVIEW_DEPTH"
+          
+      - name: Upload review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-review-${{ github.event.number }}
+          path: |
+            review-*.md
+            metrics-*.json
+            pr-*-info.json
+
+  auto-planning:
+    if: github.event_name == 'issues' && contains(github.event.issue.body, '@claude plan')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+      - name: Setup dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          
+      - name: Auto-generate project plan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Extract project details from issue
+          PROJECT_NAME=$(echo "${{ github.event.issue.title }}" | sed 's/.*: //')
+          STACK_CONFIG="react-node"  # Could be detected from issue body
+          
+          # Run auto roadmap
+          ./scripts/planning/auto-roadmap.sh "$PROJECT_NAME" "$STACK_CONFIG" "${{ github.repository }}"
+          
+      - name: Upload planning artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-plan-${{ github.event.issue.number }}
+          path: |
+            roadmap-*.md
+            project-board-*.sh

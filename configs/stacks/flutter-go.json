@@ -1,0 +1,93 @@
+{
+  "name": "Flutter + Go",
+  "id": "flutter-go",
+  "description": "Cross-platform mobile app with Flutter frontend and Go backend",
+  "technologies": {
+    "frontend": {
+      "framework": "Flutter",
+      "language": "Dart",
+      "state_management": "Bloc/Cubit",
+      "http": "Dio",
+      "testing": "flutter_test + mockito"
+    },
+    "backend": {
+      "runtime": "Go",
+      "framework": "Gin/Fiber",
+      "language": "Go",
+      "database": "PostgreSQL",
+      "orm": "GORM",
+      "testing": "testify + httptest"
+    },
+    "devops": {
+      "containerization": "Docker",
+      "orchestration": "Kubernetes", 
+      "ci_cd": "GitHub Actions",
+      "monitoring": "Prometheus + Grafana"
+    }
+  },
+  "agents": {
+    "frontend": {
+      "role": "Mobile Developer",
+      "expertise": ["Flutter", "Dart", "Bloc", "Material Design", "iOS/Android"],
+      "responsibilities": [
+        "Create Flutter widgets and screens",
+        "Implement state management with Bloc",
+        "Design responsive UI for mobile devices",
+        "Write widget tests and integration tests",
+        "Optimize app performance and bundle size"
+      ]
+    },
+    "backend": {
+      "role": "Backend Developer",
+      "expertise": ["Go", "Gin/Fiber", "GORM", "PostgreSQL", "JWT"],
+      "responsibilities": [
+        "Design and implement REST APIs with Go",
+        "Set up database models with GORM",
+        "Implement authentication and middleware",
+        "Write API tests with testify",
+        "Optimize performance and concurrency"
+      ]
+    },
+    "testing": {
+      "role": "QA Engineer",
+      "expertise": ["flutter_test", "integration_test", "Go testing", "API Testing"],
+      "responsibilities": [
+        "Write comprehensive widget tests",
+        "Create integration tests for Flutter app",
+        "Implement API tests for Go backend",
+        "Set up test coverage reporting", 
+        "Ensure quality gates and CI integration"
+      ]
+    },
+    "devops": {
+      "role": "DevOps Engineer",
+      "expertise": ["Docker", "Kubernetes", "GitHub Actions", "Mobile CI/CD"],
+      "responsibilities": [
+        "Create Docker containers for Go services",
+        "Set up mobile app CI/CD pipelines",
+        "Configure deployment to app stores",
+        "Implement monitoring and crash reporting",
+        "Set up backend infrastructure"
+      ]
+    }
+  },
+  "project_structure": {
+    "mobile": "mobile/",
+    "backend": "backend/",
+    "shared": "shared/",
+    "docs": "docs/",
+    "infrastructure": "infrastructure/"
+  },
+  "dependencies": {
+    "frontend": {
+      "runtime": ["flutter_bloc", "dio", "shared_preferences"],
+      "dev": ["flutter_lints", "build_runner", "json_annotation"],
+      "testing": ["flutter_test", "mockito", "integration_test"]
+    },
+    "backend": {
+      "runtime": ["github.com/gin-gonic/gin", "gorm.io/gorm", "gorm.io/driver/postgres"],
+      "dev": ["github.com/air-verse/air", "github.com/golang-jwt/jwt"],
+      "testing": ["github.com/stretchr/testify", "github.com/DATA-DOG/go-sqlmock"]
+    }
+  }
+}

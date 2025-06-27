@@ -1,0 +1,93 @@
+{
+  "name": "Vue.js + Python",
+  "id": "vue-python",
+  "description": "Modern web application with Vue.js frontend and Python backend",
+  "technologies": {
+    "frontend": {
+      "framework": "Vue.js 3",
+      "language": "TypeScript",
+      "styling": "Tailwind CSS",
+      "bundler": "Vite",
+      "testing": "Vitest + Vue Test Utils"
+    },
+    "backend": {
+      "runtime": "Python",
+      "framework": "FastAPI",
+      "language": "Python",
+      "database": "PostgreSQL",
+      "orm": "SQLAlchemy",
+      "testing": "pytest + httpx"
+    },
+    "devops": {
+      "containerization": "Docker",
+      "orchestration": "Kubernetes",
+      "ci_cd": "GitHub Actions",
+      "monitoring": "Prometheus + Grafana"
+    }
+  },
+  "agents": {
+    "frontend": {
+      "role": "Frontend Developer",
+      "expertise": ["Vue.js", "TypeScript", "Tailwind CSS", "Vite", "Vitest"],
+      "responsibilities": [
+        "Create Vue.js components with Composition API",
+        "Implement responsive design with Tailwind CSS",
+        "Set up Vite build configuration",
+        "Write unit tests with Vitest and Vue Test Utils",
+        "Optimize bundle size and performance"
+      ]
+    },
+    "backend": {
+      "role": "Backend Developer",
+      "expertise": ["Python", "FastAPI", "SQLAlchemy", "PostgreSQL", "Pydantic"],
+      "responsibilities": [
+        "Design and implement REST APIs with FastAPI",
+        "Set up database models with SQLAlchemy",
+        "Implement authentication with JWT",
+        "Write API tests with pytest and httpx",
+        "Optimize database queries and performance"
+      ]
+    },
+    "testing": {
+      "role": "QA Engineer", 
+      "expertise": ["pytest", "Playwright", "Vue Test Utils", "API Testing"],
+      "responsibilities": [
+        "Write comprehensive unit tests",
+        "Create integration tests for API endpoints",
+        "Implement E2E tests with Playwright",
+        "Set up test coverage reporting",
+        "Ensure quality gates and CI integration"
+      ]
+    },
+    "devops": {
+      "role": "DevOps Engineer",
+      "expertise": ["Docker", "Kubernetes", "GitHub Actions", "AWS/GCP"],
+      "responsibilities": [
+        "Create Docker containers for services",
+        "Set up Kubernetes manifests",
+        "Design CI/CD pipelines",
+        "Configure monitoring and logging",
+        "Implement security best practices"
+      ]
+    }
+  },
+  "project_structure": {
+    "frontend": "frontend/",
+    "backend": "backend/",
+    "shared": "shared/",
+    "docs": "docs/",
+    "infrastructure": "infrastructure/"
+  },
+  "dependencies": {
+    "frontend": {
+      "runtime": ["vue", "@vue/runtime-dom", "vue-router"],
+      "dev": ["vite", "@vitejs/plugin-vue", "tailwindcss"],
+      "testing": ["vitest", "@vue/test-utils", "jsdom"]
+    },
+    "backend": {
+      "runtime": ["fastapi", "sqlalchemy", "psycopg2-binary"],
+      "dev": ["uvicorn", "python-multipart", "python-jose"],
+      "testing": ["pytest", "httpx", "pytest-asyncio"]
+    }
+  }
+}
