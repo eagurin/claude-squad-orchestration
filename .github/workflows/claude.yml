@@ -35,8 +35,6 @@ jobs:
         uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          
-          # Use Claude 3.5 Haiku Latest for faster responses
           model: "claude-3-5-haiku-latest"
           
           # Optional: Customize the trigger phrase (default: @claude)
