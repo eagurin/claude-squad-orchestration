@@ -35,8 +35,6 @@ jobs:
         uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
           model: "claude-3-5-haiku-latest"
           
           # Optional: Customize the trigger phrase (default: @claude)
@@ -45,14 +43,18 @@ jobs:
           # Optional: Trigger when specific user is assigned to an issue
           # assignee_trigger: "claude-bot"
           
-          # Optional: Allow Claude to run specific commands
-          # allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
+          # Allow Claude to run common development commands
+          allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
           
-          # Optional: Add custom instructions for Claude to customize its behavior for your project
-          # custom_instructions: |
-          #   Follow our coding standards
-          #   Ensure all new code has tests
-          #   Use TypeScript for new files
+          # Custom instructions for the project
+          custom_instructions: |
+            This is a Claude Squad Orchestration project with TypeScript/Node.js backend.
+            Follow these guidelines:
+            - Follow existing code style and patterns
+            - Ensure all new code has proper TypeScript types
+            - Run tests and linting before suggesting changes
+            - Focus on the orchestration system and GitHub Actions workflows
+            - Maintain compatibility with existing entities and database schema
           
           # Optional: Custom environment variables for Claude
           # claude_env: |
