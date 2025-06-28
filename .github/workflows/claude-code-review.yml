@@ -21,7 +21,9 @@ jobs:
           fetch-depth: 1
 
       - name: Auto review PR
+        id: claude-review
         uses: anthropics/claude-code-action@beta
+        continue-on-error: true  # Prevent API failures from blocking PR workflow
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           model: "claude-sonnet-4-20250514"
@@ -39,3 +41,21 @@ jobs:
             Be constructive and specific in your feedback. Give inline comments where applicable.
             Focus on the most important issues and be concise to stay within token limits.
           allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
+
+      - name: Report Review Status
+        if: always()
+        run: |
+          if [ "${{ steps.claude-review.outcome }}" = "failure" ]; then
+            echo "⚠️ Claude code review failed"
+            echo "📋 The PR can still be merged manually after human review"
+            echo "🔍 Possible issues:"
+            echo "  - Claude API rate limits or quota exceeded"
+            echo "  - Large PR exceeding token limits"
+            echo "  - Network or service issues"
+            echo "💡 Consider breaking large PRs into smaller chunks"
+          elif [ "${{ steps.claude-review.outcome }}" = "success" ]; then
+            echo "✅ Claude code review completed successfully"
+            echo "📝 Review comments should be visible in the PR"
+          else
+            echo "⏭️ Claude code review was skipped"
+          fi

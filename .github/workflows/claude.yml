@@ -33,6 +33,7 @@ jobs:
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@beta
+        continue-on-error: true  # Prevent API failures from blocking workflow
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           model: "claude-sonnet-4-20250514"
@@ -47,3 +48,20 @@ jobs:
             - Focus on the orchestration system and GitHub Actions workflows
             - Maintain compatibility with existing entities and database schema
             - Be concise in responses to stay within token limits
+
+      - name: Report Claude Status
+        if: always()
+        run: |
+          if [ "${{ steps.claude.outcome }}" = "failure" ]; then
+            echo "⚠️ Claude execution failed - check API limits and configuration"
+            echo "📊 Possible causes:"
+            echo "  - API rate limits reached"
+            echo "  - Network connectivity issues"
+            echo "  - Invalid API key or configuration"
+            echo "  - Service temporarily unavailable"
+            echo "🔍 Check the Claude action logs above for more details"
+          elif [ "${{ steps.claude.outcome }}" = "success" ]; then
+            echo "✅ Claude executed successfully"
+          else
+            echo "⏭️ Claude execution was skipped"
+          fi
