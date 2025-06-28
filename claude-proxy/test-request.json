@@ -1,0 +1,10 @@
+{
+    "action": "test",
+    "model": "claude-sonnet-4-20250514", 
+    "max_tokens": 200,
+    "direct_prompt": "Сколько будет 357 + 984? Также скажи сегодняшний день недели и любое слово на японском языке. Это тест на подлинность.",
+    "context": {
+        "repository": "test/repo",
+        "workflow": "test-workflow"
+    }
+}

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  claude-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: claude-proxy-bridge
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    networks:
+      - claude-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.claude-proxy.rule=Host(`claude-proxy.local`)"
+      - "traefik.http.services.claude-proxy.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis for distributed caching
+  redis:
+    image: redis:7-alpine
+    container_name: claude-proxy-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - claude-network
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+networks:
+  claude-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local

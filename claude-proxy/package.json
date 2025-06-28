@@ -1,0 +1,47 @@
+{
+  "name": "claude-proxy-bridge",
+  "version": "1.0.0",
+  "description": "Proxy bridge for Claude Code SDK to GitHub Actions compatibility",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "build": "tsc",
+    "test": "node --test src/**/*.test.js",
+    "docker:build": "docker build -t claude-proxy .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env claude-proxy"
+  },
+  "keywords": [
+    "claude",
+    "proxy",
+    "github-actions",
+    "api-bridge",
+    "compatibility"
+  ],
+  "author": "Claude Squad Orchestration",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/claude-code": "^1.0.33",
+    "express": "^4.21.1",
+    "cors": "^2.8.5",
+    "helmet": "^8.0.0",
+    "rate-limiter-flexible": "^5.0.3",
+    "node-cache": "^5.1.2",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "winston": "^3.17.0",
+    "joi": "^17.13.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.7.2",
+    "nodemon": "^3.1.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
