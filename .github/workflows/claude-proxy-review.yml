@@ -1,0 +1,237 @@
+name: Auto review PRs with Local Proxy
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  auto-review-proxy:
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for diff analysis
+
+      # 🚀 Setup and start Claude proxy
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'claude-proxy/package-lock.json'
+
+      - name: Install proxy dependencies
+        working-directory: claude-proxy
+        run: npm ci --production
+
+      - name: Start Claude Proxy Bridge
+        working-directory: claude-proxy
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PORT: 3002
+          NODE_ENV: production
+          REQUIRE_AUTH: false
+          CACHE_ENABLED: true
+          CACHE_TTL: 600  # 10 minutes for review caching
+          LOG_LEVEL: info
+          DEFAULT_MODEL: claude-sonnet-4-20250514
+          MAX_TOKENS: 8192  # Larger context for code reviews
+        run: |
+          # Start proxy in background
+          nohup npm start > review-proxy.log 2>&1 &
+          PROXY_PID=$!
+          echo "PROXY_PID=$PROXY_PID" >> $GITHUB_ENV
+          
+          # Wait for proxy to be ready
+          echo "⏳ Starting Claude proxy for PR review..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:3002/health > /dev/null; then
+              echo "✅ Claude review proxy is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ Claude proxy failed to start"
+              cat review-proxy.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+      # 📊 Gather PR context
+      - name: Gather PR Context
+        id: pr-context
+        run: |
+          # Get PR diff
+          echo "📄 Getting PR diff..."
+          git diff origin/${{ github.base_ref }}..HEAD > pr.diff
+          
+          # Get changed files
+          echo "📁 Getting changed files..."
+          git diff --name-only origin/${{ github.base_ref }}..HEAD > changed_files.txt
+          
+          # Count changes
+          ADDITIONS=$(git diff --numstat origin/${{ github.base_ref }}..HEAD | awk '{sum+=$1} END {print sum+0}')
+          DELETIONS=$(git diff --numstat origin/${{ github.base_ref }}..HEAD | awk '{sum+=$2} END {print sum+0}')
+          FILES_CHANGED=$(cat changed_files.txt | wc -l)
+          
+          echo "ADDITIONS=$ADDITIONS" >> $GITHUB_OUTPUT
+          echo "DELETIONS=$DELETIONS" >> $GITHUB_OUTPUT
+          echo "FILES_CHANGED=$FILES_CHANGED" >> $GITHUB_OUTPUT
+          
+          echo "📊 PR Stats: +$ADDITIONS -$DELETIONS files: $FILES_CHANGED"
+
+      # 🎯 Auto review PR via proxy
+      - name: Auto review PR via Proxy
+        id: claude-review
+        continue-on-error: true  # Prevent API failures from blocking PR workflow
+        env:
+          CLAUDE_PROXY_URL: http://localhost:3002
+        run: |
+          # Prepare detailed review request
+          cat > review_request.json << 'EOF'
+          {
+            "action": "code_review",
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 8192,
+            "temperature": 0.2,
+            "direct_prompt": "Please conduct a thorough code review of this pull request. Analyze the changes and provide feedback on:\n\n- Code quality and best practices\n- Potential bugs or issues\n- Performance considerations\n- Security concerns\n- Test coverage\n- Architecture and design decisions\n- Maintainability\n\nFocus on the most critical issues first. Be constructive and specific in your feedback. If you see any immediate blockers or security issues, highlight them clearly.\n\nPR Details:\n- Title: ${{ github.event.pull_request.title }}\n- Author: ${{ github.event.pull_request.user.login }}\n- Additions: ${{ steps.pr-context.outputs.ADDITIONS }}\n- Deletions: ${{ steps.pr-context.outputs.DELETIONS }}\n- Files changed: ${{ steps.pr-context.outputs.FILES_CHANGED }}\n\nPlease provide your review in a clear, well-structured format.",
+            "context": {
+              "repository": "${{ github.repository }}",
+              "pr_number": ${{ github.event.pull_request.number }},
+              "pr_title": "${{ github.event.pull_request.title }}",
+              "pr_author": "${{ github.event.pull_request.user.login }}",
+              "base_branch": "${{ github.base_ref }}",
+              "head_branch": "${{ github.head_ref }}",
+              "additions": ${{ steps.pr-context.outputs.ADDITIONS }},
+              "deletions": ${{ steps.pr-context.outputs.DELETIONS }},
+              "files_changed": ${{ steps.pr-context.outputs.FILES_CHANGED }}
+            },
+            "diff": ""
+          }
+          EOF
+          
+          # Add diff to request (truncate if too large)
+          if [ -f pr.diff ]; then
+            DIFF_SIZE=$(wc -c < pr.diff)
+            if [ $DIFF_SIZE -lt 50000 ]; then
+              # Small diff - include full diff
+              jq --rawfile diff pr.diff '.diff = $diff' review_request.json > temp.json && mv temp.json review_request.json
+            else
+              # Large diff - include summary
+              echo "⚠️ Large diff detected (${DIFF_SIZE} bytes), including summary only"
+              head -1000 pr.diff > pr.diff.summary
+              jq --rawfile diff pr.diff.summary '.diff = $diff' review_request.json > temp.json && mv temp.json review_request.json
+              jq '.direct_prompt = .direct_prompt + "\n\n⚠️ Note: This is a large PR. Only the first 1000 lines of diff are included. Please focus on architectural and security concerns."' review_request.json > temp.json && mv temp.json review_request.json
+            fi
+          fi
+          
+          # Send review request to proxy
+          echo "📤 Sending PR review request to Claude proxy..."
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Repository: ${{ github.repository }}" \
+            -H "X-GitHub-Workflow: ${{ github.workflow }}" \
+            -H "X-Request-ID: review-${{ github.event.pull_request.number }}-$(date +%s)" \
+            -d @review_request.json \
+            "$CLAUDE_PROXY_URL/api/github-actions/claude" \
+            -o review_response.json \
+            -w "HTTP Status: %{http_code}\nTotal Time: %{time_total}s\n"
+          
+          # Process response
+          if [ -f review_response.json ]; then
+            echo "📨 Review response received"
+            
+            # Extract review content
+            jq -r '.response // .error' review_response.json > review_content.txt
+            
+            # Check if review was successful
+            if jq -e '.success == true' review_response.json > /dev/null; then
+              echo "✅ Review completed successfully"
+              echo "HAS_REVIEW=true" >> $GITHUB_ENV
+            else
+              echo "⚠️ Review completed with warnings"
+              echo "HAS_REVIEW=partial" >> $GITHUB_ENV
+            fi
+          else
+            echo "❌ No review response received"
+            echo "HAS_REVIEW=false" >> $GITHUB_ENV
+          fi
+
+      # 💬 Post review as comment
+      - name: Post Review Comment
+        if: env.HAS_REVIEW == 'true' || env.HAS_REVIEW == 'partial'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const reviewContent = fs.readFileSync('review_content.txt', 'utf8');
+              const hasReview = '${{ env.HAS_REVIEW }}';
+              
+              let comment = '## 🤖 Claude Code Review\n\n';
+              
+              if (hasReview === 'partial') {
+                comment += '⚠️ **Note**: Review completed with some limitations.\n\n';
+              }
+              
+              comment += reviewContent;
+              comment += '\n\n---\n';
+              comment += `*Review generated via local Claude proxy bridge*\n`;
+              comment += `*Model: claude-sonnet-4-20250514 | Time: ${new Date().toISOString()}*`;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+              
+              console.log('✅ Review comment posted successfully');
+            } catch (error) {
+              console.error('❌ Failed to post review comment:', error);
+              core.setFailed(`Failed to post review: ${error.message}`);
+            }
+
+      - name: Report Review Status
+        if: always()
+        working-directory: claude-proxy
+        run: |
+          echo "📊 Claude Review Proxy Metrics:"
+          curl -s http://localhost:3002/api/metrics | jq . || echo "Failed to get metrics"
+          
+          echo "📊 Cache Stats:"
+          curl -s http://localhost:3002/api/cache/stats | jq . || echo "Failed to get cache stats"
+          
+          if [ "${{ steps.claude-review.outcome }}" = "failure" ]; then
+            echo "⚠️ Claude code review failed"
+            echo "📋 Review proxy logs:"
+            tail -100 review-proxy.log
+            echo "💡 The PR can still be merged manually after human review"
+          elif [ "${{ steps.claude-review.outcome }}" = "success" ]; then
+            echo "✅ Claude code review completed successfully"
+            if [ "${{ env.HAS_REVIEW }}" = "true" ]; then
+              echo "📝 Review comments posted to PR"
+            fi
+          else
+            echo "⏭️ Claude code review was skipped"
+          fi
+
+      # 🧹 Cleanup
+      - name: Stop Review Proxy
+        if: always()
+        run: |
+          if [ ! -z "$PROXY_PID" ]; then
+            echo "🛑 Stopping Claude review proxy (PID: $PROXY_PID)"
+            kill $PROXY_PID || true
+            sleep 2
+            kill -9 $PROXY_PID || true
+          fi

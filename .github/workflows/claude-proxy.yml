@@ -1,0 +1,154 @@
+name: Claude Code with Local Proxy
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  claude-with-proxy:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # 🚀 Start local Claude proxy bridge
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'claude-proxy/package-lock.json'
+
+      - name: Install proxy dependencies
+        working-directory: claude-proxy
+        run: npm ci
+
+      - name: Start Claude Proxy Bridge
+        working-directory: claude-proxy
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PORT: 3001
+          NODE_ENV: production
+          REQUIRE_AUTH: false  # Disabled for GitHub Actions runner
+          CACHE_ENABLED: true
+          LOG_LEVEL: info
+        run: |
+          # Start proxy in background
+          nohup npm start > proxy.log 2>&1 &
+          PROXY_PID=$!
+          echo "PROXY_PID=$PROXY_PID" >> $GITHUB_ENV
+          
+          # Wait for proxy to be ready
+          echo "⏳ Waiting for Claude proxy to start..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:3001/health > /dev/null; then
+              echo "✅ Claude proxy is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ Claude proxy failed to start"
+              cat proxy.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+      # 🎯 Use Claude through local proxy
+      - name: Run Claude Code via Proxy
+        id: claude
+        continue-on-error: true  # Prevent API failures from blocking workflow
+        env:
+          CLAUDE_PROXY_URL: http://localhost:3001
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKFLOW: ${{ github.workflow }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          # Prepare request payload
+          cat > claude_request.json << 'EOF'
+          {
+            "action": "chat",
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 4096,
+            "temperature": 0.3,
+            "direct_prompt": "${{ github.event.comment.body || github.event.issue.body || github.event.review.body }}",
+            "context": {
+              "repository": "${{ github.repository }}",
+              "workflow": "${{ github.workflow }}",
+              "actor": "${{ github.actor }}",
+              "event_name": "${{ github.event_name }}",
+              "ref": "${{ github.ref }}"
+            }
+          }
+          EOF
+          
+          # Send request to local proxy
+          echo "📤 Sending request to Claude proxy..."
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Repository: ${{ github.repository }}" \
+            -H "X-GitHub-Workflow: ${{ github.workflow }}" \
+            -H "X-GitHub-Actor: ${{ github.actor }}" \
+            -d @claude_request.json \
+            "$CLAUDE_PROXY_URL/api/github-actions/claude" \
+            -o claude_response.json \
+            -w "HTTP Status: %{http_code}\nTotal Time: %{time_total}s\n"
+          
+          # Check response
+          if [ -f claude_response.json ]; then
+            echo "📨 Response received:"
+            cat claude_response.json | jq -r '.response // .error'
+          else
+            echo "❌ No response received"
+            exit 1
+          fi
+
+      - name: Report Claude Status
+        if: always()
+        working-directory: claude-proxy
+        run: |
+          echo "📊 Claude Proxy Metrics:"
+          curl -s http://localhost:3001/api/metrics | jq . || echo "Failed to get metrics"
+          
+          echo "📊 Claude Proxy Status:"
+          curl -s http://localhost:3001/api/status | jq . || echo "Failed to get status"
+          
+          if [ "${{ steps.claude.outcome }}" = "failure" ]; then
+            echo "⚠️ Claude execution failed - check proxy logs"
+            echo "📋 Proxy logs:"
+            tail -50 proxy.log
+          elif [ "${{ steps.claude.outcome }}" = "success" ]; then
+            echo "✅ Claude executed successfully via proxy"
+          else
+            echo "⏭️ Claude execution was skipped"
+          fi
+
+      # 🧹 Cleanup
+      - name: Stop Claude Proxy
+        if: always()
+        run: |
+          if [ ! -z "$PROXY_PID" ]; then
+            echo "🛑 Stopping Claude proxy (PID: $PROXY_PID)"
+            kill $PROXY_PID || true
+            sleep 2
+            kill -9 $PROXY_PID || true
+          fi
