@@ -20,42 +20,91 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Auto review PR
-        id: claude-review
-        uses: anthropics/claude-code-action@beta
-        continue-on-error: true  # Prevent API failures from blocking PR workflow
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: "claude-sonnet-4-20250514"
-          max_tokens: 4096
-          direct_prompt: |
-            Please review this PR. Look at the changes and provide thoughtful feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
-            - Suggestions for improvements
-            - Overall architecture and design decisions
+      - name: Setup Claude Proxy Bridge for Review
+        run: |
+          echo "🔧 Starting Claude Proxy Bridge for PR review..."
+          cd claude-proxy
+          npm install
+          # Start proxy in background
+          nohup npm start > review-proxy.log 2>&1 &
+          echo $! > review-proxy.pid
+          sleep 10
+          # Check if proxy is running
+          if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+            echo "✅ Claude Proxy Bridge started for review"
+          else
+            echo "❌ Failed to start Claude Proxy Bridge for review"
+            cat review-proxy.log
+            exit 1
+          fi
 
-            Be constructive and specific in your feedback. Give inline comments where applicable.
-            Focus on the most important issues and be concise to stay within token limits.
-          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
+      - name: Auto review PR via Proxy
+        id: claude-review
+        continue-on-error: true  # Prevent API failures from blocking PR workflow
+        run: |
+          echo "🤖 Executing Claude PR review via Proxy Bridge..."
+          
+          # Prepare the review request
+          cat > review_request.json << 'EOF'
+          {
+            "action": "code_review",
+            "direct_prompt": "Please review this PR. Look at the changes and provide thoughtful feedback on:\n- Code quality and best practices\n- Potential bugs or issues\n- Performance considerations\n- Security concerns\n- Test coverage\n- Suggestions for improvements\n- Overall architecture and design decisions\n\nBe constructive and specific in your feedback. Focus on the most important issues and be concise.",
+            "max_tokens": 3072,
+            "context": {
+              "repository": "${{ github.repository }}",
+              "pr_number": "${{ github.event.pull_request.number }}",
+              "pr_title": "${{ github.event.pull_request.title }}",
+              "workflow": "auto-review"
+            }
+          }
+          EOF
+          
+          # Make request to our proxy
+          review_response=$(curl -s -X POST http://localhost:3000/api/github-actions/claude \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Repository: ${{ github.repository }}" \
+            -H "X-GitHub-Workflow: auto-review" \
+            --data @review_request.json)
+          
+          echo "📝 Claude Review Response:"
+          echo "$review_response" | jq -r '.response // .error // "No review response"'
+          
+          # Save response for status reporting
+          echo "$review_response" > review_response.json
 
       - name: Report Review Status
         if: always()
         run: |
+          echo "📊 Claude Proxy Review Status Report"
+          echo "==================================="
+          
           if [ "${{ steps.claude-review.outcome }}" = "failure" ]; then
-            echo "⚠️ Claude code review failed"
+            echo "⚠️ Claude proxy review failed"
             echo "📋 The PR can still be merged manually after human review"
-            echo "🔍 Possible issues:"
-            echo "  - Claude API rate limits or quota exceeded"
+            echo "🔍 Checking proxy logs..."
+            if [ -f claude-proxy/review-proxy.log ]; then
+              echo "📋 Proxy logs:"
+              tail -20 claude-proxy/review-proxy.log
+            fi
+            echo "📊 Possible issues:"
+            echo "  - Claude Code SDK not available in GitHub Actions"
+            echo "  - MAX subscription not accessible in CI environment"
             echo "  - Large PR exceeding token limits"
             echo "  - Network or service issues"
             echo "💡 Consider breaking large PRs into smaller chunks"
           elif [ "${{ steps.claude-review.outcome }}" = "success" ]; then
-            echo "✅ Claude code review completed successfully"
-            echo "📝 Review comments should be visible in the PR"
+            echo "✅ Claude proxy review completed successfully"
+            if [ -f review_response.json ]; then
+              echo "📝 Review summary:"
+              cat review_response.json | jq -r '.action // "unknown"'
+            fi
           else
             echo "⏭️ Claude code review was skipped"
+          fi
+          
+          # Cleanup proxy process
+          if [ -f claude-proxy/review-proxy.pid ]; then
+            echo "🧹 Cleaning up review proxy process..."
+            kill $(cat claude-proxy/review-proxy.pid) 2>/dev/null || true
+            rm claude-proxy/review-proxy.pid
           fi
