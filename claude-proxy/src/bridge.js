@@ -90,6 +90,46 @@ export class ClaudeProxyBridge {
   }
 
   /**
+   * 🌊 Streaming proxy request method
+   */
+  async proxyRequestStream(request, onChunk) {
+    const startTime = Date.now();
+    this.metrics.requests++;
+    this.metrics.lastRequestTime = new Date().toISOString();
+
+    try {
+      this.logger.debug(`[${request.requestId}] Starting streaming request via ${this.authMethod}`);
+
+      // Prepare Claude API request
+      const claudeRequest = this.transformToClaudeFormat(request);
+      
+      // Execute streaming request based on auth method
+      await this.executeStreamWithRetry(claudeRequest, request.requestId, onChunk);
+      
+      const responseTime = Date.now() - startTime;
+      this.logger.info(`[${request.requestId}] Streaming request completed in ${responseTime}ms`);
+      
+    } catch (error) {
+      this.metrics.errors++;
+      const responseTime = Date.now() - startTime;
+      
+      this.logger.error(`[${request.requestId}] Streaming request failed after ${responseTime}ms:`, error);
+      
+      // Send error to stream
+      if (onChunk) {
+        onChunk(`ERROR: ${error.message || 'Stream failed'}`, 'error');
+      }
+      
+      throw {
+        status: error.status || 500,
+        message: error.message || 'Streaming request failed',
+        requestId: request.requestId,
+        responseTime,
+      };
+    }
+  }
+
+  /**
    * 🎯 Main proxy request method
    */
   async proxyRequest(request) {
@@ -256,6 +296,86 @@ export class ClaudeProxyBridge {
     }
 
     return claudeRequest;
+  }
+
+  /**
+   * 🌊 Execute streaming request with retry logic
+   */
+  async executeStreamWithRetry(claudeRequest, requestId, onChunk, attempt = 1) {
+    try {
+      this.logger.debug(`[${requestId}] Executing streaming Claude request (attempt ${attempt}) via ${this.authMethod}`);
+      
+      switch (this.authMethod) {
+        case 'api':
+          // Anthropic API streaming (highest priority)
+          await this.streamAnthropicAPI(claudeRequest, requestId, onChunk);
+          break;
+          
+        case 'sdk':
+          // TypeScript SDK streaming (preferred for MAX)
+          this.logger.info(`[${requestId}] Using Claude Code TypeScript SDK streaming (MAX subscription)`);
+          const { prompt, sdkOptions } = this.claudeSDK.transformRequest(claudeRequest);
+          await this.claudeSDK.executeStream(prompt, {
+            requestId,
+            onChunk,
+            timeout: 60000,
+            ...sdkOptions
+          });
+          break;
+          
+        case 'cli':
+          // CLI streaming fallback
+          this.logger.info(`[${requestId}] Using Claude Code CLI streaming fallback (MAX subscription)`);
+          const cliPrompt = this.claudeCLI.transformRequest(claudeRequest);
+          await this.claudeCLI.executeStream(cliPrompt, {
+            model: claudeRequest.model,
+            timeout: 60000,
+            onChunk
+          });
+          break;
+          
+        default:
+          throw new Error(`No authentication method available for streaming. Current method: ${this.authMethod}. Please provide ANTHROPIC_API_KEY or install Claude Code SDK/CLI.`);
+      }
+      
+    } catch (error) {
+      this.logger.warn(`[${requestId}] Streaming attempt ${attempt} failed:`, error.message);
+      
+      // Check if we should retry
+      if (attempt < this.options.retryAttempts && this.isRetryableError(error)) {
+        const delay = this.options.retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+        this.logger.info(`[${requestId}] Retrying streaming in ${delay}ms...`);
+        
+        await this.sleep(delay);
+        return this.executeStreamWithRetry(claudeRequest, requestId, onChunk, attempt + 1);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * 🌊 Stream Anthropic API responses
+   */
+  async streamAnthropicAPI(claudeRequest, requestId, onChunk) {
+    const stream = await this.anthropic.messages.create({
+      ...claudeRequest,
+      stream: true
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta') {
+        // Send content as it arrives
+        const text = chunk.delta?.text || '';
+        if (text) {
+          onChunk(text, 'content');
+        }
+      } else if (chunk.type === 'message_start') {
+        onChunk('', 'start');
+      } else if (chunk.type === 'message_stop') {
+        onChunk('', 'stop');
+      }
+    }
   }
 
   /**
@@ -470,6 +590,12 @@ export class ClaudeProxyBridge {
     return {
       authMethods: ['api', 'sdk', 'cli'],
       outputFormats: ['text', 'json', 'stream-json'],
+      streaming: {
+        supported: this.authMethod !== 'none',
+        sseSupport: true, // Server-Sent Events
+        realTimeChunks: true,
+        formats: ['text/plain', 'text/event-stream']
+      },
       maxSubscription: this.authMethod !== 'api',
       caching: this.options.cacheEnabled,
       retryLogic: true,

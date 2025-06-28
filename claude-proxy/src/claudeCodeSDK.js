@@ -26,6 +26,98 @@ export class ClaudeCodeSDK {
   }
 
   /**
+   * Execute streaming query using official Claude Code SDK
+   */
+  async executeStream(prompt, options = {}) {
+    const startTime = Date.now();
+    const requestId = options.requestId || `sdk_stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const onChunk = options.onChunk || (() => {});
+    
+    this.logger.info(`[${requestId}] Executing Claude Code SDK streaming query`);
+    
+    try {
+      const abortController = new AbortController();
+      
+      // Setup timeout
+      const timeout = options.timeout || 60000; // 60 seconds default
+      const timeoutId = setTimeout(() => {
+        abortController.abort();
+      }, timeout);
+      
+      // Prepare query options
+      const queryOptions = {
+        maxTurns: options.maxTurns || this.options.maxTurns,
+        outputFormat: 'text', // Use text for streaming
+        cwd: options.cwd || this.options.cwd,
+        allowedTools: options.allowedTools || this.options.allowedTools,
+        systemPrompt: options.systemPrompt || this.options.systemPrompt,
+        mcpConfig: options.mcpConfig || this.options.mcpConfig,
+        ...options.sdkOptions
+      };
+      
+      this.logger.debug(`[${requestId}] Stream query options`, queryOptions);
+      
+      // Track streaming content
+      let streamingContent = '';
+      let lastSentLength = 0;
+      
+      // Execute query with streaming
+      for await (const message of query({
+        prompt,
+        abortController,
+        options: queryOptions
+      })) {
+        // Handle different message types for streaming
+        if (message.type === 'assistant') {
+          const currentText = message.message?.content?.[0]?.text || '';
+          
+          // Send incremental content
+          if (currentText.length > lastSentLength) {
+            const newChunk = currentText.slice(lastSentLength);
+            onChunk(newChunk, 'content');
+            lastSentLength = currentText.length;
+          }
+          
+          streamingContent = currentText;
+        } else if (message.type === 'system' && message.subtype === 'thinking') {
+          // Claude is thinking - send thinking indicator
+          onChunk('', 'thinking');
+        } else if (message.type === 'result') {
+          this.logger.info(`[${requestId}] Stream query completed`, {
+            subtype: message.subtype,
+            duration: message.duration_ms,
+            turns: message.num_turns,
+            cost: message.total_cost_usd
+          });
+          
+          // Send final completion
+          onChunk('', 'complete');
+        }
+      }
+      
+      clearTimeout(timeoutId);
+      
+      const duration = Date.now() - startTime;
+      this.logger.info(`[${requestId}] SDK streaming execution completed in ${duration}ms`);
+      
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`[${requestId}] SDK streaming execution failed after ${duration}ms:`, error);
+      
+      // Send error to stream
+      onChunk(`Error: ${error.message}`, 'error');
+      
+      throw {
+        status: 500,
+        message: error.message || 'Claude Code SDK streaming execution failed',
+        requestId,
+        duration,
+        source: 'sdk'
+      };
+    }
+  }
+
+  /**
    * Execute query using official Claude Code SDK
    */
   async execute(prompt, options = {}) {

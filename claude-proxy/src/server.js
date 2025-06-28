@@ -118,12 +118,42 @@ app.post('/api/github-actions/claude', async (req, res) => {
     action: req.body.action || 'chat',
     repository: req.headers['x-github-repository'],
     workflow: req.headers['x-github-workflow'],
+    stream: req.body.stream || false,
   });
 
   try {
     // Transform GitHub Actions format to Claude API format
     const claudeRequest = claudeBridge.transformGitHubActionsRequest(req.body);
     
+    // Check if streaming is requested
+    if (req.body.stream === true) {
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Request-ID': requestId,
+      });
+
+      // Stream the response
+      await claudeBridge.proxyRequestStream({
+        ...claudeRequest,
+        requestId,
+        headers: req.headers,
+        isGitHubActions: true,
+        stream: true,
+      }, (chunk) => {
+        // Send each chunk as it comes
+        res.write(chunk);
+      });
+
+      const duration = Date.now() - startTime;
+      logger.info(`[${requestId}] GitHub Actions Claude stream completed in ${duration}ms`);
+      res.end();
+      return;
+    }
+
+    // Non-streaming request (existing logic)
     const response = await claudeBridge.proxyRequest({
       ...claudeRequest,
       requestId,
@@ -148,6 +178,65 @@ app.post('/api/github-actions/claude', async (req, res) => {
       duration,
       action: 'error',
     });
+  }
+});
+
+// 🌊 Streaming endpoint for Claude API
+app.post('/api/claude/messages/stream', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.headers['x-request-id'] || `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  logger.info(`[${requestId}] Claude API stream request started`, {
+    model: req.body.model,
+    max_tokens: req.body.max_tokens,
+  });
+
+  try {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'X-Request-ID': requestId,
+    });
+
+    // Send initial connection event
+    res.write(`data: {"type":"connection","request_id":"${requestId}"}\n\n`);
+
+    // Stream the response
+    await claudeBridge.proxyRequestStream({
+      ...req.body,
+      requestId,
+      headers: req.headers,
+      stream: true,
+    }, (chunk, type = 'content') => {
+      // Send Server-Sent Events format
+      res.write(`data: ${JSON.stringify({
+        type,
+        content: chunk,
+        request_id: requestId,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+    });
+
+    const duration = Date.now() - startTime;
+    logger.info(`[${requestId}] Claude API stream completed in ${duration}ms`);
+    
+    // Send completion event
+    res.write(`data: {"type":"complete","request_id":"${requestId}","duration":${duration}}\n\n`);
+    res.end();
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`[${requestId}] Claude API stream failed after ${duration}ms:`, error);
+    
+    res.write(`data: ${JSON.stringify({
+      type: 'error',
+      error: error.message || 'Stream failed',
+      request_id: requestId,
+      duration
+    })}\n\n`);
+    res.end();
   }
 });
 
