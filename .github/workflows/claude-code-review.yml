@@ -1,59 +1,41 @@
-name: Claude Code Review
+name: Auto review PRs
 
 on:
   pull_request:
-    types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    types: [opened]
 
 jobs:
-  claude-review:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  auto-review:
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
+      pull-requests: read
+      issues: read
       id-token: write
-    
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Run Claude Code Review
-        id: claude-review
+      - name: Auto review PR
         uses: anthropics/claude-code-action@beta
-        continue-on-error: true
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          
-          # Use Claude 3.5 Haiku Latest for faster code reviews
-          model: "claude-3-5-haiku-latest"
-          
+          model: "claude-sonnet-4-20250514"
+          max_tokens: 4096
           direct_prompt: |
-            Please review this pull request and provide feedback on:
+            Please review this PR. Look at the changes and provide thoughtful feedback on:
             - Code quality and best practices
             - Potential bugs or issues
             - Performance considerations
             - Security concerns
             - Test coverage
-            
-            Be constructive and helpful in your feedback.
-          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-      
-      - name: Handle Claude Review Failure
-        if: steps.claude-review.outcome == 'failure'
-        run: |
-          echo "⚠️ Claude Code Review failed. This may be due to:"
-          echo "- API rate limits"
-          echo "- Network issues"
-          echo "- Invalid configuration"
-          echo "Please check the logs above for more details."
-          exit 0
+            - Suggestions for improvements
+            - Overall architecture and design decisions
 
+            Be constructive and specific in your feedback. Give inline comments where applicable.
+            Focus on the most important issues and be concise to stay within token limits.
+          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"

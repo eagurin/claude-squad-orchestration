@@ -21,8 +21,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
+      pull-requests: read
+      issues: read
       id-token: write
     steps:
       - name: Checkout repository
@@ -33,21 +33,11 @@ jobs:
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@beta
-        continue-on-error: true
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # model: "claude-3-5-haiku-latest"
-          
-          # Optional: Customize the trigger phrase (default: @claude)
-          # trigger_phrase: "/claude"
-          
-          # Optional: Trigger when specific user is assigned to an issue
-          # assignee_trigger: "claude-bot"
-          
-          # Allow Claude to run common development commands
+          model: "claude-sonnet-4-20250514"
+          max_tokens: 4096
           allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-          
-          # Custom instructions for the project
           custom_instructions: |
             This is a Claude Squad Orchestration project with TypeScript/Node.js backend.
             Follow these guidelines:
@@ -56,7 +46,4 @@ jobs:
             - Run tests and linting before suggesting changes
             - Focus on the orchestration system and GitHub Actions workflows
             - Maintain compatibility with existing entities and database schema
-          
-          # Optional: Custom environment variables for Claude
-          # claude_env: |
-          #   NODE_ENV: test
+            - Be concise in responses to stay within token limits
