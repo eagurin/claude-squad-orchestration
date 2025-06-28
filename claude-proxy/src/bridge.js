@@ -18,10 +18,18 @@ export class ClaudeProxyBridge {
 
     this.logger = new Logger();
     
-    // Initialize Anthropic SDK
-    this.anthropic = new Anthropic({
-      apiKey: this.options.anthropicApiKey,
-    });
+    // Initialize Anthropic SDK only if API key is provided
+    if (this.options.anthropicApiKey) {
+      this.anthropic = new Anthropic({
+        apiKey: this.options.anthropicApiKey,
+      });
+    } else {
+      this.logger.warn('No ANTHROPIC_API_KEY provided - will try Claude Code CLI for MAX subscribers');
+      // Dynamic import to avoid loading if not needed
+      import('./claudeCodeCLI.js').then(({ ClaudeCodeCLI }) => {
+        this.claudeCLI = new ClaudeCodeCLI();
+      });
+    }
 
     // Initialize cache
     this.cache = this.options.cacheEnabled 
@@ -221,14 +229,40 @@ export class ClaudeProxyBridge {
    */
   async executeWithRetry(claudeRequest, requestId, attempt = 1) {
     try {
-      this.logger.debug(`[${requestId}] Executing Claude API request (attempt ${attempt})`);
+      this.logger.debug(`[${requestId}] Executing Claude request (attempt ${attempt})`);
       
-      const response = await this.anthropic.messages.create(claudeRequest);
+      let response;
       
-      this.logger.debug(`[${requestId}] Claude API request successful`, {
-        model: response.model,
-        usage: response.usage,
-      });
+      // Try API first if available
+      if (this.anthropic) {
+        response = await this.anthropic.messages.create(claudeRequest);
+        this.logger.debug(`[${requestId}] Claude API request successful`, {
+          model: response.model,
+          usage: response.usage,
+        });
+      } 
+      // Fallback to CLI for MAX subscribers
+      else if (this.claudeCLI) {
+        this.logger.info(`[${requestId}] Using Claude Code CLI (MAX subscription)`);
+        const prompt = this.claudeCLI.transformRequest(claudeRequest);
+        const cliResponse = await this.claudeCLI.execute(prompt, {
+          model: claudeRequest.model,
+          timeout: 60000 // 60 seconds timeout
+        });
+        
+        // Transform CLI response to API format
+        response = {
+          content: [{ type: 'text', text: cliResponse.content }],
+          model: cliResponse.model,
+          usage: cliResponse.usage,
+          role: 'assistant',
+          type: 'message'
+        };
+      } 
+      // No authentication method available
+      else {
+        throw new Error('No authentication method available. Provide ANTHROPIC_API_KEY or install Claude Code CLI.');
+      }
       
       return response;
       

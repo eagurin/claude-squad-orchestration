@@ -1,0 +1,10 @@
+{
+    "action": "chat",
+    "model": "claude-sonnet-4-20250514",
+    "max_tokens": 100,
+    "direct_prompt": "Say 'Hello from Claude Proxy!' and nothing else",
+    "context": {
+        "repository": "test/repo",
+        "workflow": "test-workflow"
+    }
+}
