@@ -18,18 +18,8 @@ export class ClaudeProxyBridge {
 
     this.logger = new Logger();
     
-    // Initialize Anthropic SDK only if API key is provided
-    if (this.options.anthropicApiKey) {
-      this.anthropic = new Anthropic({
-        apiKey: this.options.anthropicApiKey,
-      });
-    } else {
-      this.logger.warn('No ANTHROPIC_API_KEY provided - will try Claude Code CLI for MAX subscribers');
-      // Dynamic import to avoid loading if not needed
-      import('./claudeCodeCLI.js').then(({ ClaudeCodeCLI }) => {
-        this.claudeCLI = new ClaudeCodeCLI();
-      });
-    }
+    // Initialize authentication methods in priority order
+    this.initializeAuthMethods();
 
     // Initialize cache
     this.cache = this.options.cacheEnabled 
@@ -53,6 +43,50 @@ export class ClaudeProxyBridge {
       defaultModel: this.options.defaultModel,
       maxTokens: this.options.maxTokens,
     });
+  }
+
+  /**
+   * 🔐 Initialize authentication methods in priority order
+   */
+  async initializeAuthMethods() {
+    // 1. Try Anthropic API key first (highest priority)
+    if (this.options.anthropicApiKey) {
+      this.anthropic = new Anthropic({
+        apiKey: this.options.anthropicApiKey,
+      });
+      this.authMethod = 'api';
+      this.logger.info('🔑 Using Anthropic API key authentication');
+      return;
+    }
+
+    // 2. Try TypeScript SDK (preferred for MAX subscribers)
+    try {
+      const { ClaudeCodeSDK } = await import('./claudeCodeSDK.js');
+      this.claudeSDK = new ClaudeCodeSDK(this.options);
+      
+      if (await this.claudeSDK.isAvailable()) {
+        this.authMethod = 'sdk';
+        this.logger.info('🚀 Using Claude Code TypeScript SDK (MAX subscription)');
+        return;
+      }
+    } catch (error) {
+      this.logger.debug('Claude Code SDK not available:', error.message);
+    }
+
+    // 3. Fallback to CLI
+    try {
+      const { ClaudeCodeCLI } = await import('./claudeCodeCLI.js');
+      this.claudeCLI = new ClaudeCodeCLI();
+      this.authMethod = 'cli';
+      this.logger.warn('📟 Using Claude Code CLI fallback (MAX subscription)');
+      return;
+    } catch (error) {
+      this.logger.debug('Claude Code CLI not available:', error.message);
+    }
+
+    // 4. No authentication method available
+    this.authMethod = 'none';
+    this.logger.error('❌ No authentication method available');
   }
 
   /**
@@ -229,39 +263,55 @@ export class ClaudeProxyBridge {
    */
   async executeWithRetry(claudeRequest, requestId, attempt = 1) {
     try {
-      this.logger.debug(`[${requestId}] Executing Claude request (attempt ${attempt})`);
+      this.logger.debug(`[${requestId}] Executing Claude request (attempt ${attempt}) via ${this.authMethod}`);
       
       let response;
       
-      // Try API first if available
-      if (this.anthropic) {
-        response = await this.anthropic.messages.create(claudeRequest);
-        this.logger.debug(`[${requestId}] Claude API request successful`, {
-          model: response.model,
-          usage: response.usage,
-        });
-      } 
-      // Fallback to CLI for MAX subscribers
-      else if (this.claudeCLI) {
-        this.logger.info(`[${requestId}] Using Claude Code CLI (MAX subscription)`);
-        const prompt = this.claudeCLI.transformRequest(claudeRequest);
-        const cliResponse = await this.claudeCLI.execute(prompt, {
-          model: claudeRequest.model,
-          timeout: 60000 // 60 seconds timeout
-        });
-        
-        // Transform CLI response to API format
-        response = {
-          content: [{ type: 'text', text: cliResponse.content }],
-          model: cliResponse.model,
-          usage: cliResponse.usage,
-          role: 'assistant',
-          type: 'message'
-        };
-      } 
-      // No authentication method available
-      else {
-        throw new Error('No authentication method available. Provide ANTHROPIC_API_KEY or install Claude Code CLI.');
+      switch (this.authMethod) {
+        case 'api':
+          // Anthropic API (highest priority)
+          response = await this.anthropic.messages.create(claudeRequest);
+          this.logger.debug(`[${requestId}] Claude API request successful`, {
+            model: response.model,
+            usage: response.usage,
+          });
+          break;
+          
+        case 'sdk':
+          // TypeScript SDK (preferred for MAX)
+          this.logger.info(`[${requestId}] Using Claude Code TypeScript SDK (MAX subscription)`);
+          const { prompt, sdkOptions } = this.claudeSDK.transformRequest(claudeRequest);
+          const sdkResponse = await this.claudeSDK.execute(prompt, {
+            requestId,
+            timeout: 60000,
+            ...sdkOptions
+          });
+          
+          // SDK response is already in API format
+          response = sdkResponse;
+          break;
+          
+        case 'cli':
+          // CLI fallback
+          this.logger.info(`[${requestId}] Using Claude Code CLI fallback (MAX subscription)`);
+          const cliPrompt = this.claudeCLI.transformRequest(claudeRequest);
+          const cliResponse = await this.claudeCLI.execute(cliPrompt, {
+            model: claudeRequest.model,
+            timeout: 60000
+          });
+          
+          // Transform CLI response to API format
+          response = {
+            content: [{ type: 'text', text: cliResponse.content }],
+            model: cliResponse.model,
+            usage: cliResponse.usage,
+            role: 'assistant',
+            type: 'message'
+          };
+          break;
+          
+        default:
+          throw new Error(`No authentication method available. Current method: ${this.authMethod}. Please provide ANTHROPIC_API_KEY or install Claude Code SDK/CLI.`);
       }
       
       return response;
@@ -353,19 +403,80 @@ export class ClaudeProxyBridge {
    * 📊 Get current status
    */
   async getStatus() {
+    const authStatus = await this.getAuthStatus();
+    
     return {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: Date.now() - this.metrics.uptime,
+      authMethod: this.authMethod,
+      authentication: authStatus,
       cache: this.cache ? {
         enabled: true,
         keys: this.cache.keys().length,
         stats: this.cache.getStats(),
       } : { enabled: false },
-      anthropic: {
-        configured: !!this.options.anthropicApiKey,
-        defaultModel: this.options.defaultModel,
-      },
+      defaultModel: this.options.defaultModel,
+      capabilities: this.getCapabilities()
+    };
+  }
+
+  /**
+   * 🔐 Get authentication status for all methods
+   */
+  async getAuthStatus() {
+    const status = {
+      current: this.authMethod,
+      available: {}
+    };
+
+    // Check API key
+    status.available.api = {
+      available: !!this.options.anthropicApiKey,
+      configured: !!this.anthropic,
+      note: this.options.anthropicApiKey ? 'API key configured' : 'No API key provided'
+    };
+
+    // Check TypeScript SDK
+    if (this.claudeSDK) {
+      status.available.sdk = await this.claudeSDK.getStatus();
+    } else {
+      status.available.sdk = {
+        available: false,
+        note: 'TypeScript SDK not initialized'
+      };
+    }
+
+    // Check CLI
+    if (this.claudeCLI) {
+      status.available.cli = {
+        available: await this.claudeCLI.isAvailable(),
+        note: 'Claude Code CLI available'
+      };
+    } else {
+      status.available.cli = {
+        available: false,
+        note: 'Claude Code CLI not initialized'
+      };
+    }
+
+    return status;
+  }
+
+  /**
+   * 🎯 Get proxy capabilities
+   */
+  getCapabilities() {
+    return {
+      authMethods: ['api', 'sdk', 'cli'],
+      outputFormats: ['text', 'json', 'stream-json'],
+      maxSubscription: this.authMethod !== 'api',
+      caching: this.options.cacheEnabled,
+      retryLogic: true,
+      rateLimit: true,
+      multiTurn: this.authMethod === 'sdk',
+      mcpServers: this.authMethod === 'sdk',
+      allowedTools: this.authMethod !== 'none'
     };
   }
 
