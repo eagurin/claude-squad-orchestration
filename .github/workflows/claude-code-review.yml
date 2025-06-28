@@ -20,11 +20,20 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'claude-proxy/package-lock.json'
+
       - name: Setup Claude Proxy Bridge for Review
         run: |
           echo "🔧 Starting Claude Proxy Bridge for PR review..."
           cd claude-proxy
-          npm install
+          echo "📦 Installing Claude Proxy dependencies..."
+          npm install --no-audit --no-fund
+          echo "✅ Dependencies installed successfully"
           # Start proxy in background
           nohup npm start > review-proxy.log 2>&1 &
           echo $! > review-proxy.pid
